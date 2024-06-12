@@ -277,8 +277,11 @@ def retry_handler(retry_limit=10):
                             if 'The read operation timed out' in err_msg:
                                 print ('reka time out issue!')
                                 return [''] # return empty strings for prompt longer than context window size, comment out this line to truncate prompt until it fits
+                            if 'Something wrong happened during your request! Please retry.If the error persists, contact our support team' in err_msg:
+                                print ('reka error!')
+                                return [''] # return empty strings for prompt longer than context window size, comment out this line to truncate prompt until it fits
                             print("Retry limit reached. Saving the error message and returning.")
-                            print(kwargs["prompt"])
+                            #print(kwargs["prompt"])
                             raise e
                         retried += 1
         return wrapper
