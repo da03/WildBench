@@ -60,6 +60,9 @@ def apply_template(chat_history, model_name):
         elif "yi-" in model_name.lower():
             model_inputs.append("n/a") # will be handled by another ways.
             continue
+        elif "nemotron" in model_name.lower():
+            model_inputs.append("n/a") # will be handled by another ways.
+            continue
         else:
             if conv is None or isinstance(conv, HF_Conversation) == False:
                 conv = map_to_conv(model_name)
@@ -239,6 +242,7 @@ def retry_handler(retry_limit=10):
                         kwargs['shorten_msg_times'] = retried
                     return func(*args, **kwargs)
                 except Exception as e:
+                    #import pdb; pdb.set_trace()
                     # if rate limit error, wait 2 seconds and retry
                     if isinstance(e, OPENAI_RATE_LIMIT_ERROR):
                         words = str(e).split(' ')
@@ -250,8 +254,11 @@ def retry_handler(retry_limit=10):
                         time.sleep(time_to_wait) # wait 30 seconds
                         # print("Finished waiting for {} seconds. Start another try".format(time_to_wait))
                     elif isinstance(e, OPENAI_API_ERROR):
+                        if 'long while only 4096 is supported' in str(e):
+                            print ('Nvidia nemotron length limit hit, return empty result!')
+                            return ['']
                         # this is because the prompt contains content that is filtered by OpenAI API
-                        if retried < retry_limit:
+                        elif retried < retry_limit:
                             print("API error:", str(e))
                             if "invalid" in str(e).lower():
                                 print("Invalid request, returning.")
@@ -708,23 +715,34 @@ def yi_chat_request(
     """
     # Call openai api to generate aspects
     API_BASE = "https://api.lingyiwanwu.com/v1"
+    API_KEY = os.environ.get("YI_API_KEY")
+    kwargs['n'] = n
+    kwargs['frequency_penalty'] = frequency_penalty
+    kwargs['presence_penalty'] = presence_penalty
+    kwargs['response_format'] = {"type": "json_object"} if json_mode else None
+    if 'nemotron' in model:
+        print ('NVIDIA MODEL')
+        API_BASE = "https://integrate.api.nvidia.com/v1"
+        API_KEY = os.environ.get("NVIDIA_API_KEY")
+        if '/' not in model:
+            model = f'nvidia/{model}'
+        for key in ['n', 'frequency_penalty', 'presence_penalty', 'response_format']:
+            if key in kwargs:
+                del kwargs[key]
     assert prompt is not None or messages is not None, "Either prompt or messages should be provided."
     if messages is None:
         messages = [{"role":"system","content":"You are a helpful AI assistant."},
                     {"role":"user","content": prompt}]
 
-    client = OpenAI(base_url=API_BASE, api_key=os.environ.get("YI_API_KEY"))
+    client = OpenAI(base_url=API_BASE, api_key=API_KEY)
     # print(f"Requesting chat completion from OpenAI API with model {model}")
+    #import pdb; pdb.set_trace()
     response = client.chat.completions.create(
         model=model,
-        response_format = {"type": "json_object"} if json_mode else None,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
         top_p=top_p,
-        n=n,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty,
         stop=stop,
         **kwargs,
     )
